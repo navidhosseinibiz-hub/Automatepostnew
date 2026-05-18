@@ -1,6 +1,6 @@
 const CONFIG = {
     BOT_TOKEN: "8848786569:AAEiMCG-b9rG6e1rgrih8LXWDba46ZkgiWc",
-    CHAT_ID: "@Updatewithai",  // 👈 تغییر داده شد
+    CHAT_ID: "@Updatewithai",
     CHANNEL_USERNAME: "@Updatewithai",
     CHANNEL_NAME: "اخبار هوش مصنوعی و فناوری",
     INTERVAL_MINUTES: 10,
@@ -30,7 +30,20 @@ async function getRedditPosts(subreddit) {
     }
 }
 
-async function translateToFarsi(text) {
+function hasImage(post) {
+    if (!post.url) return false;
+    const url = post.url.toLowerCase();
+    return (
+        url.includes('i.redd.it') ||
+        url.includes('i.imgur.com') ||
+        url.endsWith('.jpg') ||
+        url.endsWith('.jpeg') ||
+        url.endsWith('.png') ||
+        url.endsWith('.gif')
+    );
+}
+
+async function cleanText(text) {
     let cleaned = text
         .replace(/<[^>]*>/g, '')
         .replace(/\[.*?\]\(.*?\)/g, '')
@@ -38,32 +51,47 @@ async function translateToFarsi(text) {
         .replace(/\n+/g, ' ')
         .trim();
     
-    if (cleaned.length > 600) {
-        cleaned = cleaned.substring(0, 600) + '...';
+    if (cleaned.length > 800) {
+        cleaned = cleaned.substring(0, 800) + '...';
     }
     
     return cleaned;
 }
 
-async function sendToTelegram(text) {
+async function sendToTelegram(text, imageUrl = null) {
     try {
-        const url = `https://api.telegram.org/bot${CONFIG.BOT_TOKEN}/sendMessage`;
-        const res = await fetch(url, {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({
+        let url, body;
+        
+        if (imageUrl) {
+            url = `https://api.telegram.org/bot${CONFIG.BOT_TOKEN}/sendPhoto`;
+            body = {
+                chat_id: CONFIG.CHAT_ID,
+                photo: imageUrl,
+                caption: text,
+                parse_mode: 'HTML'
+            };
+        } else {
+            url = `https://api.telegram.org/bot${CONFIG.BOT_TOKEN}/sendMessage`;
+            body = {
                 chat_id: CONFIG.CHAT_ID,
                 text: text,
                 parse_mode: 'HTML',
                 disable_web_page_preview: true
-            })
+            };
+        }
+        
+        const res = await fetch(url, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(body)
         });
+        
         const result = await res.json();
         if (result.ok) {
-            console.log('✅ ارسال به کانال موفق بود');
+            console.log(imageUrl ? '✅ ارسال با عکس موفق' : '✅ ارسال متن موفق');
             return true;
         } else {
-            console.error('❌ خطا در ارسال:', result.description);
+            console.error('❌ خطا:', result.description);
             return false;
         }
     } catch (e) {
@@ -74,7 +102,7 @@ async function sendToTelegram(text) {
 
 async function sendNews() {
     console.log('\n' + '='.repeat(50));
-    console.log('🔍 در حال جستجوی اخبار هوش مصنوعی...');
+    console.log('🔍 جستجوی اخبار AI...');
     console.log('='.repeat(50));
     
     const subs = ['artificial', 'MachineLearning', 'singularity', 'OpenAI'];
@@ -86,7 +114,7 @@ async function sendNews() {
         await new Promise(r => setTimeout(r, 2000));
     }
     
-    console.log(`📊 مجموع پست‌ها: ${allPosts.length}`);
+    console.log(`📊 کل: ${allPosts.length}`);
     
     const valid = allPosts.filter(p => 
         p && 
@@ -96,15 +124,15 @@ async function sendNews() {
         !p.stickied
     );
     
-    console.log(`✅ پست‌های معتبر: ${valid.length}`);
+    console.log(`✅ معتبر: ${valid.length}`);
     
     if (valid.length === 0) {
-        console.log('⚠️ خبر جدیدی نیست، از پست‌های موجود استفاده می‌شود');
+        console.log('⚠️ از پست‌های موجود استفاده می‌شود');
         const sorted = allPosts
             .filter(p => p && p.title)
             .sort((a, b) => b.score - a.score);
         if (sorted.length === 0) {
-            console.log('❌ هیچ پستی یافت نشد');
+            console.log('❌ پستی یافت نشد');
             return;
         }
         valid.push(sorted[0]);
@@ -113,7 +141,10 @@ async function sendNews() {
     valid.sort((a, b) => b.score - a.score);
     const post = valid[0];
     
-    console.log(`📌 انتخاب شد: ${post.title.substring(0, 60)}...`);
+    console.log(`📌 ${post.title.substring(0, 50)}...`);
+    
+    const imageUrl = hasImage(post) ? post.url : null;
+    if (imageUrl) console.log(`📸 عکس: ${imageUrl}`);
     
     let emoji = '🚀';
     const t = post.title.toLowerCase();
@@ -124,7 +155,7 @@ async function sendNews() {
     
     let content = post.title;
     if (post.selftext && post.selftext.length > 50) {
-        const cleaned = await translateToFarsi(post.selftext);
+        const cleaned = await cleanText(post.selftext);
         content = `${post.title}\n\n${cleaned}`;
     }
     
@@ -136,13 +167,13 @@ ${CONFIG.CHANNEL_USERNAME}
 
 برای دریافت جدیدترین اخبار هوش مصنوعی، کانال را دنبال کنید 🔔`;
     
-    const sent = await sendToTelegram(msg);
+    const sent = await sendToTelegram(msg, imageUrl);
     if (sent) {
         sentPosts.add(post.id);
-        console.log(`✅ موفق! مجموع ارسالی: ${sentPosts.size}`);
+        console.log(`✅ موفق! مجموع: ${sentPosts.size}`);
     }
     
-    console.log(`⏳ خبر بعدی در ${CONFIG.INTERVAL_MINUTES} دقیقه`);
+    console.log(`⏳ بعدی در ${CONFIG.INTERVAL_MINUTES} دقیقه`);
 }
 
 const http = require('http');
@@ -164,24 +195,26 @@ h1{color:#667eea;margin:0 0 20px}
 </head>
 <body>
 <div class="box">
-<h1>🤖 ربات خبر هوش مصنوعی</h1>
+<h1>🤖 ربات خبر AI</h1>
 <div class="status">✅ فعال</div>
-<div class="info">📊 خبرهای ارسالی: ${sentPosts.size}</div>
+<div class="info">📊 ارسالی: ${sentPosts.size}</div>
 <div class="info">⏱️ هر ${CONFIG.INTERVAL_MINUTES} دقیقه</div>
 <div class="info">📢 ${CONFIG.CHANNEL_NAME}</div>
 <div class="info">🆔 ${CONFIG.CHANNEL_USERNAME}</div>
+<div class="info">📸 قابلیت عکس: فعال</div>
 </div>
 </body>
 </html>
     `);
 }).listen(process.env.PORT || 8080, () => {
-    console.log('🌐 سرور وب راه‌اندازی شد');
+    console.log('🌐 سرور فعال');
 });
 
 async function main() {
-    console.log('\n🚀 ربات خبر هوش مصنوعی شروع شد!');
+    console.log('\n🚀 ربات شروع شد!');
     console.log(`📡 کانال: ${CONFIG.CHANNEL_NAME} (${CONFIG.CHANNEL_USERNAME})`);
-    console.log(`⏱️  بازه: ${CONFIG.INTERVAL_MINUTES} دقیقه\n`);
+    console.log(`⏱️  بازه: ${CONFIG.INTERVAL_MINUTES} دقیقه`);
+    console.log(`📸 عکس: فعال\n`);
     
     await sendNews();
     setInterval(sendNews, CONFIG.INTERVAL_MINUTES * 60 * 1000);
