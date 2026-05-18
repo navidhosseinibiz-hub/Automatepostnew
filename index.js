@@ -1,8 +1,8 @@
 const CONFIG = {
     BOT_TOKEN: "8848786569:AAEiMCG-b9rG6e1rgrih8LXWDba46ZkgiWc",
     CHAT_ID: "1953951548",
-    CHANNEL_USERNAME: "@navidvideos",
-    CHANNEL_NAME: "ناوید ویدیوز",
+    CHANNEL_USERNAME: "@Updatewithai",
+    CHANNEL_NAME: "اخبار هوش مصنوعی و فناوری",
     INTERVAL_MINUTES: 10,
     MIN_UPVOTES: 50
 };
