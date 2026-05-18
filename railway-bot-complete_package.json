@@ -1,0 +1,23 @@
+{
+  "name": "telegram-ai-news-bot",
+  "version": "1.0.0",
+  "description": "Automated AI news bot for Telegram from Reddit - Persian",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "keywords": [
+    "telegram",
+    "bot",
+    "ai",
+    "news",
+    "reddit",
+    "persian",
+    "farsi"
+  ],
+  "author": "Navid Hosseini",
+  "license": "MIT",
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
