@@ -74,19 +74,17 @@ async function selectBestNews() {
     for (const subreddit of CONFIG.SUBREDDITS) {
         const posts = await getRedditPosts(subreddit, "hot", 15);
         allPosts = allPosts.concat(posts);
-        await new Promise(resolve => setTimeout(resolve, 2000)); // تاخیر 2 ثانیه
+        await new Promise(resolve => setTimeout(resolve, 2000));
     }
     
     console.log(`📊 تعداد کل پست‌ها: ${allPosts.length}`);
     
-    // فیلتر پست‌های مناسب
     const validPosts = allPosts.filter(post => {
         if (!post || !post.title) return false;
         if (post.stickied) return false;
         if (sentPosts.has(post.id)) return false;
         if (post.score < CONFIG.MIN_UPVOTES) return false;
         
-        // فقط پست‌هایی که متن دارند یا لینک خارجی
         const hasText = post.selftext && post.selftext.length > 50;
         const hasUrl = post.url && !post.url.includes('i.redd.it') && !post.url.includes('v.redd.it');
         
@@ -98,7 +96,7 @@ async function selectBestNews() {
     if (validPosts.length === 0) {
         console.log("⚠️ خبر جدیدی یافت نشد، از پست‌های موجود استفاده می‌شود");
         const sortedPosts = allPosts
-            .filter(p => p && p.title && !post.stickied)
+            .filter(p => p && p.title && !p.stickied)
             .sort((a, b) => b.score - a.score);
         return sortedPosts[0] || null;
     }
@@ -209,7 +207,7 @@ const server = http.createServer((req, res) => {
         <head>
             <meta charset="UTF-8">
             <meta name="viewport" content="width=device-width, initial-scale=1.0">
-            <title>AI News Bot - Status</title>
+            <title>AI News Bot</title>
             <style>
                 * { margin: 0; padding: 0; box-sizing: border-box; }
                 body { 
@@ -238,11 +236,6 @@ const server = http.createServer((req, res) => {
                     text-align: center;
                     font-size: 1.2em;
                     margin-bottom: 30px;
-                    animation: pulse 2s infinite;
-                }
-                @keyframes pulse {
-                    0%, 100% { opacity: 1; }
-                    50% { opacity: 0.8; }
                 }
                 .info { 
                     background: #f3f4f6; 
@@ -285,10 +278,8 @@ async function main() {
     console.log(`🌐 Subreddits: ${CONFIG.SUBREDDITS.join(', ')}`);
     console.log("=".repeat(60) + "\n");
     
-    // ارسال اولین خبر
     await sendNewsUpdate();
     
-    // تنظیم interval
     setInterval(async () => {
         await sendNewsUpdate();
     }, CONFIG.INTERVAL_MINUTES * 60 * 1000);
