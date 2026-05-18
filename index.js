@@ -9,6 +9,29 @@ const CONFIG = {
 
 let sentPosts = new Set();
 
+async function translateToPersian(text) {
+    try {
+        // استفاده از MyMemory API
+        const shortText = text.substring(0, 500);
+        const encoded = encodeURIComponent(shortText);
+        const url = `https://api.mymemory.translated.net/get?q=${encoded}&langpair=en|fa`;
+        
+        const res = await fetch(url);
+        const data = await res.json();
+        
+        if (data.responseData && data.responseData.translatedText) {
+            console.log('✅ ترجمه موفق');
+            return data.responseData.translatedText;
+        }
+        
+        console.log('⚠️ ترجمه انجام نشد، متن اصلی استفاده می‌شود');
+        return text;
+    } catch (e) {
+        console.error('❌ خطای ترجمه:', e.message);
+        return text;
+    }
+}
+
 async function getRedditPosts(subreddit) {
     try {
         const url = `https://api.reddit.com/r/${subreddit}/hot?limit=20`;
@@ -41,21 +64,6 @@ function hasImage(post) {
         url.endsWith('.png') ||
         url.endsWith('.gif')
     );
-}
-
-async function cleanText(text) {
-    let cleaned = text
-        .replace(/<[^>]*>/g, '')
-        .replace(/\[.*?\]\(.*?\)/g, '')
-        .replace(/\*/g, '')
-        .replace(/\n+/g, ' ')
-        .trim();
-    
-    if (cleaned.length > 800) {
-        cleaned = cleaned.substring(0, 800) + '...';
-    }
-    
-    return cleaned;
 }
 
 async function sendToTelegram(text, imageUrl = null) {
@@ -153,13 +161,11 @@ async function sendNews() {
     else if (t.includes('robot')) emoji = '🦾';
     else if (t.includes('google')) emoji = '🔮';
     
-    let content = post.title;
-    if (post.selftext && post.selftext.length > 50) {
-        const cleaned = await cleanText(post.selftext);
-        content = `${post.title}\n\n${cleaned}`;
-    }
+    // ترجمه عنوان
+    console.log('🔄 در حال ترجمه...');
+    const translatedTitle = await translateToPersian(post.title);
     
-    const msg = `${emoji} ${content}
+    const msg = `${emoji} <b>${translatedTitle}</b>
 
 ━━━━━━━━━━━━━━━━━━━━
 📢 ${CONFIG.CHANNEL_NAME}
@@ -201,7 +207,8 @@ h1{color:#667eea;margin:0 0 20px}
 <div class="info">⏱️ هر ${CONFIG.INTERVAL_MINUTES} دقیقه</div>
 <div class="info">📢 ${CONFIG.CHANNEL_NAME}</div>
 <div class="info">🆔 ${CONFIG.CHANNEL_USERNAME}</div>
-<div class="info">📸 قابلیت عکس: فعال</div>
+<div class="info">📸 عکس: فعال</div>
+<div class="info">🌐 ترجمه: فعال</div>
 </div>
 </body>
 </html>
@@ -214,7 +221,8 @@ async function main() {
     console.log('\n🚀 ربات شروع شد!');
     console.log(`📡 کانال: ${CONFIG.CHANNEL_NAME} (${CONFIG.CHANNEL_USERNAME})`);
     console.log(`⏱️  بازه: ${CONFIG.INTERVAL_MINUTES} دقیقه`);
-    console.log(`📸 عکس: فعال\n`);
+    console.log(`📸 عکس: فعال`);
+    console.log(`🌐 ترجمه: فعال\n`);
     
     await sendNews();
     setInterval(sendNews, CONFIG.INTERVAL_MINUTES * 60 * 1000);
