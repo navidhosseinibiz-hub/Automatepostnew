@@ -1,26 +1,31 @@
 // 🤖 ربات خودکار ارسال اخبار هوش مصنوعی به تلگرام
-// نسخه Railway - بدون نیاز به dependencies خارجی
+// نسخه بهبود یافته - حل مشکل Reddit 403
 
 const CONFIG = {
     BOT_TOKEN: process.env.BOT_TOKEN || "8848786569:AAEiMCG-b9rG6e1rgrih8LXWDba46ZkgiWc",
     CHAT_ID: process.env.CHAT_ID || "1953951548",
     INTERVAL_MINUTES: parseInt(process.env.INTERVAL_MINUTES) || 10,
     SUBREDDITS: ["artificial", "MachineLearning", "singularity", "OpenAI", "ChatGPT"],
-    MIN_UPVOTES: parseInt(process.env.MIN_UPVOTES) || 100
+    MIN_UPVOTES: parseInt(process.env.MIN_UPVOTES) || 50
 };
 
 let sentPosts = new Set();
 
-// ============ توابع Reddit ============
+// ============ توابع Reddit با User-Agent بهتر ============
 async function getRedditPosts(subreddit, sort = "hot", limit = 10) {
     try {
         const url = `https://www.reddit.com/r/${subreddit}/${sort}.json?limit=${limit}`;
         const response = await fetch(url, {
-            headers: { 'User-Agent': 'TelegramAINewsBot/1.0' }
+            headers: { 
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                'Accept': 'application/json',
+                'Accept-Language': 'en-US,en;q=0.9'
+            }
         });
         
         if (!response.ok) {
-            throw new Error(`HTTP ${response.status}`);
+            console.error(`❌ خطا در دریافت از r/${subreddit}: HTTP ${response.status}`);
+            return [];
         }
         
         const data = await response.json();
@@ -61,29 +66,40 @@ async function sendToTelegram(message) {
     }
 }
 
-// ============ انتخاب خبر ============
+// ============ انتخاب خبر با فیلتر بهتر ============
 async function selectBestNews() {
     console.log("🔍 جستجوی خبر...");
     let allPosts = [];
     
     for (const subreddit of CONFIG.SUBREDDITS) {
-        const posts = await getRedditPosts(subreddit, "hot", 10);
+        const posts = await getRedditPosts(subreddit, "hot", 15);
         allPosts = allPosts.concat(posts);
-        await new Promise(resolve => setTimeout(resolve, 1000));
+        await new Promise(resolve => setTimeout(resolve, 2000)); // تاخیر 2 ثانیه
     }
     
-    // فیلتر کردن خبرهای مناسب
-    const validPosts = allPosts.filter(post => 
-        post && 
-        post.score >= CONFIG.MIN_UPVOTES && 
-        !sentPosts.has(post.id) &&
-        !post.stickied &&
-        post.title
-    );
+    console.log(`📊 تعداد کل پست‌ها: ${allPosts.length}`);
+    
+    // فیلتر پست‌های مناسب
+    const validPosts = allPosts.filter(post => {
+        if (!post || !post.title) return false;
+        if (post.stickied) return false;
+        if (sentPosts.has(post.id)) return false;
+        if (post.score < CONFIG.MIN_UPVOTES) return false;
+        
+        // فقط پست‌هایی که متن دارند یا لینک خارجی
+        const hasText = post.selftext && post.selftext.length > 50;
+        const hasUrl = post.url && !post.url.includes('i.redd.it') && !post.url.includes('v.redd.it');
+        
+        return hasText || hasUrl;
+    });
+    
+    console.log(`✅ پست‌های معتبر: ${validPosts.length}`);
     
     if (validPosts.length === 0) {
-        console.log("⚠️ خبر جدیدی یافت نشد، از خبرهای موجود استفاده می‌شود");
-        const sortedPosts = allPosts.filter(p => p && p.title).sort((a, b) => b.score - a.score);
+        console.log("⚠️ خبر جدیدی یافت نشد، از پست‌های موجود استفاده می‌شود");
+        const sortedPosts = allPosts
+            .filter(p => p && p.title && !post.stickied)
+            .sort((a, b) => b.score - a.score);
         return sortedPosts[0] || null;
     }
     
@@ -100,24 +116,31 @@ function getTopicEmoji(title) {
     if (t.includes('breakthrough') || t.includes('research')) return '🔬';
     if (t.includes('job') || t.includes('employment')) return '💼';
     if (t.includes('money') || t.includes('revenue')) return '💰';
+    if (t.includes('google') || t.includes('gemini')) return '🔮';
     return '🚀';
 }
 
 function formatNumber(num) {
-    if (num >= 1000000) {
-        return (num / 1000000).toFixed(1) + 'M';
-    }
-    if (num >= 1000) {
-        return (num / 1000).toFixed(1) + 'K';
-    }
+    if (num >= 1000000) return (num / 1000000).toFixed(1) + 'M';
+    if (num >= 1000) return (num / 1000).toFixed(1) + 'K';
     return num.toString();
 }
 
 function formatPersianNews(post) {
     const emoji = getTopicEmoji(post.title);
-    const description = post.selftext 
-        ? post.selftext.substring(0, 300).replace(/<[^>]*>/g, '').trim() + '...'
-        : 'برای مشاهده جزئیات بیشتر روی لینک کلیک کنید.';
+    
+    let description = '';
+    if (post.selftext && post.selftext.length > 50) {
+        description = post.selftext
+            .substring(0, 400)
+            .replace(/<[^>]*>/g, '')
+            .replace(/\n+/g, '\n')
+            .trim() + '...';
+    } else if (post.url && !post.url.includes('reddit.com')) {
+        description = `🔗 لینک: ${post.url.substring(0, 100)}...`;
+    } else {
+        description = 'برای مشاهده جزئیات بیشتر روی لینک کلیک کنید.';
+    }
     
     return `${emoji} <b>${post.title}</b>
 
@@ -147,17 +170,17 @@ async function sendNewsUpdate() {
             return;
         }
         
-        console.log(`📌 ${post.title.substring(0, 60)}...`);
+        console.log(`📌 ${post.title.substring(0, 70)}...`);
         console.log(`   Score: ${post.score} | Comments: ${post.num_comments}`);
+        console.log(`   Subreddit: r/${post.subreddit}`);
         
         const message = formatPersianNews(post);
         const sent = await sendToTelegram(message);
         
         if (sent) {
             sentPosts.add(post.id);
-            console.log(`✅ ارسال شد - مجموع: ${sentPosts.size}`);
+            console.log(`✅ ارسال شد - مجموع خبرهای ارسالی: ${sentPosts.size}`);
             
-            // پاکسازی حافظه
             if (sentPosts.size > 1000) {
                 const postsArray = Array.from(sentPosts);
                 sentPosts = new Set(postsArray.slice(-500));
@@ -171,12 +194,10 @@ async function sendNewsUpdate() {
     console.log(`⏳ خبر بعدی در ${CONFIG.INTERVAL_MINUTES} دقیقه...`);
 }
 
-// ============ وب سرور (برای Health Check) ============
+// ============ وب سرور ============
 const http = require('http');
 
 const server = http.createServer((req, res) => {
-    const now = new Date();
-    
     res.writeHead(200, { 
         'Content-Type': 'text/html; charset=utf-8',
         'Access-Control-Allow-Origin': '*'
@@ -192,7 +213,7 @@ const server = http.createServer((req, res) => {
             <style>
                 * { margin: 0; padding: 0; box-sizing: border-box; }
                 body { 
-                    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+                    font-family: Arial, sans-serif;
                     background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
                     min-height: 100vh;
                     display: flex;
@@ -208,12 +229,7 @@ const server = http.createServer((req, res) => {
                     max-width: 600px;
                     width: 100%;
                 }
-                h1 { 
-                    color: #667eea;
-                    margin-bottom: 30px;
-                    font-size: 2em;
-                    text-align: center;
-                }
+                h1 { color: #667eea; margin-bottom: 30px; text-align: center; font-size: 1.8em; }
                 .status { 
                     background: #10b981;
                     color: white;
@@ -228,84 +244,34 @@ const server = http.createServer((req, res) => {
                     0%, 100% { opacity: 1; }
                     50% { opacity: 0.8; }
                 }
-                .info-grid {
-                    display: grid;
-                    gap: 15px;
-                    margin-top: 20px;
+                .info { 
+                    background: #f3f4f6; 
+                    padding: 15px; 
+                    border-radius: 10px; 
+                    margin: 10px 0;
+                    border-right: 4px solid #667eea;
                 }
-                .info-item {
-                    background: #f3f4f6;
-                    padding: 15px;
-                    border-radius: 10px;
-                    border-left: 4px solid #667eea;
-                }
-                .info-label {
-                    color: #6b7280;
-                    font-size: 0.9em;
-                    margin-bottom: 5px;
-                }
-                .info-value {
-                    color: #111827;
-                    font-size: 1.1em;
-                    font-weight: bold;
-                }
-                .footer {
-                    margin-top: 30px;
-                    text-align: center;
-                    color: #6b7280;
-                    font-size: 0.9em;
-                }
+                .info strong { color: #667eea; }
             </style>
         </head>
         <body>
             <div class="container">
                 <h1>🤖 ربات خبر هوش مصنوعی</h1>
-                
-                <div class="status">
-                    ✅ ربات در حال اجرا است
-                </div>
-                
-                <div class="info-grid">
-                    <div class="info-item">
-                        <div class="info-label">⏰ آخرین بررسی</div>
-                        <div class="info-value">${now.toLocaleString('fa-IR')}</div>
-                    </div>
-                    
-                    <div class="info-item">
-                        <div class="info-label">📊 خبرهای ارسال شده</div>
-                        <div class="info-value">${sentPosts.size} خبر</div>
-                    </div>
-                    
-                    <div class="info-item">
-                        <div class="info-label">⏱️ بازه زمانی</div>
-                        <div class="info-value">هر ${CONFIG.INTERVAL_MINUTES} دقیقه</div>
-                    </div>
-                    
-                    <div class="info-item">
-                        <div class="info-label">📡 کانال</div>
-                        <div class="info-value">${CONFIG.CHAT_ID}</div>
-                    </div>
-                    
-                    <div class="info-item">
-                        <div class="info-label">📊 حداقل آپ‌وت</div>
-                        <div class="info-value">${CONFIG.MIN_UPVOTES}+</div>
-                    </div>
-                </div>
-                
-                <div class="footer">
-                    Railway Deployment • Node.js ${process.version}
-                </div>
+                <div class="status">✅ ربات در حال اجرا است</div>
+                <div class="info"><strong>⏰ آخرین بررسی:</strong> ${new Date().toLocaleString('fa-IR')}</div>
+                <div class="info"><strong>📊 خبرهای ارسال شده:</strong> ${sentPosts.size} خبر</div>
+                <div class="info"><strong>⏱️ بازه زمانی:</strong> هر ${CONFIG.INTERVAL_MINUTES} دقیقه</div>
+                <div class="info"><strong>📡 کانال:</strong> ${CONFIG.CHAT_ID}</div>
+                <div class="info"><strong>📊 حداقل آپ‌وت:</strong> ${CONFIG.MIN_UPVOTES}+</div>
             </div>
         </body>
         </html>
     `);
 });
 
-const PORT = process.env.PORT || 3000;
-
+const PORT = process.env.PORT || 8080;
 server.listen(PORT, () => {
     console.log(`🌐 وب سرور فعال در پورت ${PORT}`);
-    console.log(`🔗 Health check: http://localhost:${PORT}`);
 });
 
 // ============ شروع ربات ============
@@ -319,16 +285,15 @@ async function main() {
     console.log(`🌐 Subreddits: ${CONFIG.SUBREDDITS.join(', ')}`);
     console.log("=".repeat(60) + "\n");
     
-    // ارسال اولین خبر بلافاصله
+    // ارسال اولین خبر
     await sendNewsUpdate();
     
-    // تنظیم interval برای ارسال‌های بعدی
+    // تنظیم interval
     setInterval(async () => {
         await sendNewsUpdate();
     }, CONFIG.INTERVAL_MINUTES * 60 * 1000);
 }
 
-// مدیریت خطاها
 process.on('unhandledRejection', (error) => {
     console.error('❌ Unhandled Rejection:', error);
 });
@@ -337,5 +302,4 @@ process.on('uncaughtException', (error) => {
     console.error('❌ Uncaught Exception:', error);
 });
 
-// اجرای برنامه
 main().catch(console.error);
