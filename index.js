@@ -1,6 +1,6 @@
 const CONFIG = {
     BOT_TOKEN: "8848786569:AAEiMCG-b9rG6e1rgrih8LXWDba46ZkgiWc",
-    CHAT_ID: "1953951548",
+    CHAT_ID: "@Updatewithai",  // 👈 تغییر داده شد
     CHANNEL_USERNAME: "@Updatewithai",
     CHANNEL_NAME: "اخبار هوش مصنوعی و فناوری",
     INTERVAL_MINUTES: 10,
@@ -31,7 +31,6 @@ async function getRedditPosts(subreddit) {
 }
 
 async function translateToFarsi(text) {
-    // ساده‌سازی و تمیز کردن متن
     let cleaned = text
         .replace(/<[^>]*>/g, '')
         .replace(/\[.*?\]\(.*?\)/g, '')
@@ -39,7 +38,6 @@ async function translateToFarsi(text) {
         .replace(/\n+/g, ' ')
         .trim();
     
-    // اگر خیلی طولانی بود، کوتاه کن
     if (cleaned.length > 600) {
         cleaned = cleaned.substring(0, 600) + '...';
     }
@@ -62,7 +60,7 @@ async function sendToTelegram(text) {
         });
         const result = await res.json();
         if (result.ok) {
-            console.log('✅ ارسال به تلگرام موفق بود');
+            console.log('✅ ارسال به کانال موفق بود');
             return true;
         } else {
             console.error('❌ خطا در ارسال:', result.description);
@@ -124,7 +122,6 @@ async function sendNews() {
     else if (t.includes('robot')) emoji = '🦾';
     else if (t.includes('google')) emoji = '🔮';
     
-    // تمیز کردن متن
     let content = post.title;
     if (post.selftext && post.selftext.length > 50) {
         const cleaned = await translateToFarsi(post.selftext);
@@ -172,6 +169,7 @@ h1{color:#667eea;margin:0 0 20px}
 <div class="info">📊 خبرهای ارسالی: ${sentPosts.size}</div>
 <div class="info">⏱️ هر ${CONFIG.INTERVAL_MINUTES} دقیقه</div>
 <div class="info">📢 ${CONFIG.CHANNEL_NAME}</div>
+<div class="info">🆔 ${CONFIG.CHANNEL_USERNAME}</div>
 </div>
 </body>
 </html>
